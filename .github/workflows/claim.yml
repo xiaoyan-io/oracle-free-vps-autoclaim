@@ -1,55 +1,66 @@
-name: Oracle Auto VPS Claim
+name: "Oracle Auto VPS Claim"
 
 on:
   schedule:
-    - cron: "*/10 * * * *"  # 每10分钟尝试一次
-  workflow_dispatch:
+    - cron: "*/10 * * * *"  # 每10分钟运行一次
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   claim:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # 设置超时时间
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4  # 更新到最新版本
 
-      - name: Set up Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install oci requests
 
-      - name: Create Config
+      - name: Configure OCI credentials
         run: |
           mkdir -p ~/.oci
-          echo "[DEFAULT]" > ~/.oci/config
-          echo "user=${{ secrets.OCI_USER_OCID }}" >> ~/.oci/config
-          echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}" >> ~/.oci/config
-          echo "key_file=~/.oci/oci_api_key.pem" >> ~/.oci/config
-          echo "tenancy=${{ secrets.OCI_TENANCY_OCID }}" >> ~/.oci/config
-          echo "region=${{ secrets.OCI_REGION }}" >> ~/.oci/config
+          cat << EOF > ~/.oci/config
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          key_file=~/.oci/oci_api_key.pem
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          EOF
+          
           echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
 
-      - name: Run Claim Script
+      - name: Execute claim script
         run: |
-          echo "Starting claim script..."
-          echo 'print("模拟抢机成功！")' > claim.py  # 替换成你的真实 claim.py 逻辑
-          python claim.py > claim.log
+          echo "Starting Oracle VPS claim process..."
+          cat > claim.py << 'EOF'
+          import oci
+          print("模拟抢机成功！")  # 替换为实际OCI API调用代码
+          EOF
+          
+          python claim.py > claim.log 2>&1
 
-      - name: Telegram Notify (Success/Fail)
+      - name: Send Telegram notification
         if: always()
         run: |
-          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
-          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
-          -d text="📡 Oracle VPS Auto Claim 任务已完成，请查看 GitHub Actions 日志。"
+          MESSAGE="Oracle VPS Auto Claim 任务已完成（状态: ${{ job.status }}）"
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="$MESSAGE"
 
-      - name: Upload Logs (Optional)
+      - name: Upload logs as artifact
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: oracle-vps-log
+          name: oracle-vps-claim-logs
           path: claim.log
